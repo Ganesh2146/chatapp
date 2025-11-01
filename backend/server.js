@@ -1,39 +1,45 @@
-import path from 'path'
-import express from 'express'
-import 'dotenv/config';   // this loads the .env file
+import path from 'path';
+import express from 'express';
+import 'dotenv/config';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import { app, server } from './socket/socket.js';
+import authRouter from './routes/authRouter.js';
+import messageRouter from './routes/messageRouter.js';
+import userRouter from './routes/userRouter.js';
+import connectToDB from './db/connectdb.js';
 
-console.log('Loaded MONGO_DB_URI:', process.env.MONGO_DB_URI);
-
-import authRouter from './routes/authRouter.js'
-import messageRouter from './routes/messageRouter.js'
-import userRouter from './routes/userRouter.js'
-import connectToDB from './db/connectdb.js'
-import cookieParser  from 'cookie-parser'
-import {app, server} from './socket/socket.js';
-
+// Base setup
 const __dirname = path.resolve();
-
-
-
 const port = process.env.PORT || 5001;
+
+// Middleware
 app.use(express.json());
 app.use(cookieParser());
 
-app.use("/api/auth/", authRouter);
-app.use("/api/messages/", messageRouter);
-app.use("/api/users/", userRouter);
+// ✅ Allow your Vercel frontend to access backend
+app.use(cors({
+  origin: ['https://your-frontend-name.vercel.app'], // 🔁 replace this
+  credentials: true,
+}));
 
-app.use(express.static(path.join(__dirname, "/frontend/dist")));
+// Routes
+app.use("/api/auth", authRouter);
+app.use("/api/messages", messageRouter);
+app.use("/api/users", userRouter);
 
-app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
-});
+// ❌ Remove static frontend serving — handled by Vercel now
+// app.use(express.static(path.join(__dirname, "/frontend/dist")));
+// app.get("*", (req, res) => {
+//   res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
+// });
 
-server.listen(port, (err)=>{
-    if(err){
-       return console.log("Internal server occured:", err);
-        
-    }
+// Start server
+server.listen(port, (err) => {
+  if (err) {
+    console.log("Internal server error:", err);
+  } else {
     connectToDB();
-    console.log("Server listening on port: "+port);
+    console.log("✅ Server running on port:", port);
+  }
 });
