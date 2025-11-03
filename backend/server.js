@@ -3,7 +3,19 @@ import express from 'express';
 import 'dotenv/config';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { app, server } from './socket/socket.js';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import express from 'express';
+import 'dotenv/config';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import authRouter from './routes/authRouter.js';
+import messageRouter from './routes/messageRouter.js';
+import userRouter from './routes/userRouter.js';
+import connectToDB from './db/connectdb.js';
+
+const app = express();
+const server = createServer(app);
 import authRouter from './routes/authRouter.js';
 import messageRouter from './routes/messageRouter.js';
 import userRouter from './routes/userRouter.js';
@@ -19,23 +31,21 @@ app.use(cookieParser());
 
 // CORS configuration for development and production
 const allowedOrigins = [
-  'http://localhost:3000',   // Local development (create-react-app default)
-  'http://localhost:5173',   // Local development (Vite default)
-  'https://chatapp-jet-gamma.vercel.app', // Production frontend
-  'https://chatapp-jet-gamma.vercel.app/' // Production frontend with trailing slash
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://chatapp-jet-gamma.vercel.app'
 ];
 
 // CORS middleware with debug logging
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  console.log('Request Origin:', origin);
+  console.log('HTTP Request Origin:', origin);
   
-  if (allowedOrigins.includes(origin) || !origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-csrf-token');
-    res.setHeader('Access-Control-Expose-Headers', '*');
     
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
@@ -45,6 +55,19 @@ app.use((req, res, next) => {
   
   next();
 });
+
+// Socket.IO configuration
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  allowEIO3: true
+});
+
+// Export io for use in other files
+app.set('io', io);
 
 // Routes
 app.use("/api/auth", authRouter);
