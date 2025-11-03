@@ -48,27 +48,46 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select("+password");
-    if (!user || !(await user.comparePasswordInDB(password, user.password))) {
+    // Validate input
+    if (!email || !password) {
       return res.status(400).json({
-        status: "fail",
-        message: "User with the email and password not found",
+        status: 'fail',
+        message: 'Please provide both email and password'
       });
     }
 
-    generateToken(user._id, res);
+    // Find user and include password for verification
+    const user = await User.findOne({ email }).select('+password');
+    
+    // Check if user exists and password is correct
+    if (!user || !(await user.comparePasswordInDB(password, user.password))) {
+      return res.status(401).json({
+        status: 'fail',
+        message: 'Incorrect email or password'
+      });
+    }
 
+    // Generate JWT token and set it in HTTP-only cookie
+    const token = generateToken(user._id, res);
+
+    // Remove password from the response
+    user.password = undefined;
+
+    // Send success response with user data
     res.status(200).json({
-      status: "success",
+      status: 'success',
+      message: 'Logged in successfully',
       data: {
         user,
-      },
+        token
+      }
     });
   } catch (error) {
-    console.log("Error occured in login user", error.message);
+    console.error('Error in loginUser:', error);
     res.status(500).json({
-      status: 'fail',
-      message: "Internal server error"
+      status: 'error',
+      message: 'An error occurred while logging in',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
