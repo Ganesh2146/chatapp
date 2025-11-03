@@ -20,7 +20,7 @@ app.use(cookieParser());
 // CORS configuration for development and production
 const allowedOrigins = [
   'http://localhost:5173', // Local development
-  'https://your-vercel-app.vercel.app' // Replace with your Vercel URL after deployment
+  'https://chatapp-jet-gamma.vercel.app/' // Replace with your Vercel URL after deployment
 ];
 
 app.use(cors({
