@@ -8,8 +8,12 @@ const server = http.createServer(app);
 //socket may give some cors error so,fixing it
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:3000"], //frontend url...
-        methods: ["GET", "POST"] //run socket for get and post methods only...
+        origin: [
+            "http://localhost:5173", // Vite dev server
+            "https://your-vercel-app.vercel.app" // Replace with your actual Vercel URL
+        ],
+        methods: ["GET", "POST"],
+        credentials: true
     }
 });
 

@@ -11,7 +11,7 @@ export const signUpUser = async (req, res) => {
         message: "Password and confirmPassword not matching",
       });
     }
-    //https://avatar.iran.liara.run/public/boy
+    // https://avatar.iran.liara.run/public/boy
 
     if(!req.body.profilePic){
       if(req.body.gender === 'male'){

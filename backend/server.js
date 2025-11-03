@@ -17,10 +17,27 @@ const port = process.env.PORT || 5001;
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Allow your Vercel frontend to access backend
+// CORS configuration for development and production
+const allowedOrigins = [
+  'http://localhost:5173', // Local development
+  'https://your-vercel-app.vercel.app' // Replace with your Vercel URL after deployment
+];
+
 app.use(cors({
-  origin: ['https://your-frontend-name.vercel.app'], // 🔁 replace this
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+  exposedHeaders: ['*', 'Authorization']
 }));
 
 // Routes
@@ -33,6 +50,15 @@ app.use("/api/users", userRouter);
 // app.get("*", (req, res) => {
 //   res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
 // });
+
+// Health and root endpoints for uptime checks
+app.get('/', (req, res) => {
+  res.status(200).send('Service is up');
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
 
 // Start server
 server.listen(port, (err) => {
