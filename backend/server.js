@@ -20,25 +20,30 @@ app.use(cookieParser());
 // CORS configuration for development and production
 const allowedOrigins = [
   'http://localhost:5173', // Local development
-  'https://chatapp-jet-gamma.vercel.app/' // Replace with your Vercel URL after deployment
+  'https://chatapp-jet-gamma.vercel.app', // Vercel frontend
+  'https://chatapp-jet-gamma.vercel.app/' // Vercel frontend with trailing slash
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+// CORS middleware with debug logging
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  console.log('Request Origin:', origin);
+  
+  if (allowedOrigins.includes(origin) || !origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-csrf-token');
+    res.setHeader('Access-Control-Expose-Headers', '*');
     
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
     }
-    return callback(null, true);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
-  exposedHeaders: ['*', 'Authorization']
-}));
+  }
+  
+  next();
+});
 
 // Routes
 app.use("/api/auth", authRouter);
