@@ -29,68 +29,73 @@ const port = process.env.PORT || 5001;
 app.use(express.json());
 app.use(cookieParser());
 
-// CORS configuration for development and production
+// CORS configuration
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
   'https://chatapp-jet-gamma.vercel.app'
 ];
 
-// CORS middleware with debug logging
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  console.log('HTTP Request Origin:', origin);
-  
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-csrf-token');
-    
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-      return res.status(200).end();
-    }
-  }
-  
-  next();
-});
-
-// Enhanced CORS configuration for all routes
+// Enable CORS for all routes
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is allowed
+    const isAllowed = allowedOrigins.some(allowedOrigin => 
+      origin === allowedOrigin || 
+      origin.replace(/\/$/, '') === allowedOrigin.replace(/\/$/, '')
+    );
+    
+    if (!isAllowed) {
+      const msg = `CORS policy: ${origin} not allowed`;
+      console.error(msg);
+      return callback(new Error(msg), false);
     }
+    return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+  exposedHeaders: ['*'],
+  maxAge: 600 // Cache preflight request for 10 minutes
 }));
 
 // Handle preflight requests
 app.options('*', cors());
 
-// Socket.IO configuration with enhanced CORS
+// Socket.IO configuration with CORS
 const io = new Server(server, {
   cors: {
-    origin: function(origin, callback) {
-      if (!origin || allowedOrigins.some(allowedOrigin => 
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // Check if origin is allowed
+      const isAllowed = allowedOrigins.some(allowedOrigin => 
         origin === allowedOrigin || 
         origin.replace(/\/$/, '') === allowedOrigin.replace(/\/$/, '')
-      )) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+      );
+      
+      if (!isAllowed) {
+        const msg = `Socket.IO CORS policy: ${origin} not allowed`;
+        console.error(msg);
+        return callback(new Error(msg), false);
       }
+      return callback(null, true);
     },
-    methods: ['GET', 'POST'],
-    credentials: true
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+    exposedHeaders: ['*'],
+    transports: ['websocket', 'polling']
   },
   allowEIO3: true,
-  transports: ['websocket', 'polling']
+  pingTimeout: 30000, // Increase timeout to 30 seconds
+  pingInterval: 25000,
+  cookie: false, // Disable Socket.IO cookies since we're using JWT
+  path: '/socket.io/' // Ensure consistent path
 });
 
 // Export io for use in other files
@@ -100,6 +105,45 @@ app.set('io', io);
 app.use("/api/auth", authRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/users", userRouter);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err.message);
+  
+  // Handle CORS errors
+  if (err.message.includes('CORS') || err.message.includes('allowed by CORS')) {
+    return res.status(403).json({ 
+      success: false,
+      message: 'Not allowed by CORS policy',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'UnauthorizedError') {
+    return res.status(401).json({ 
+      success: false,
+      message: 'Invalid or expired token',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+
+  // Handle other errors
+  res.status(err.status || 500).json({ 
+    success: false,
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'API endpoint not found',
+    path: req.path
+  });
+});
 
 // ❌ Remove static frontend serving — handled by Vercel now
 // app.use(express.static(path.join(__dirname, "/frontend/dist")));
