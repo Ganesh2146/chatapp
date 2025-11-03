@@ -19,9 +19,10 @@ app.use(cookieParser());
 
 // CORS configuration for development and production
 const allowedOrigins = [
-  'http://localhost:5173', // Local development
-  'https://chatapp-jet-gamma.vercel.app', // Vercel frontend
-  'https://chatapp-jet-gamma.vercel.app/' // Vercel frontend with trailing slash
+  'http://localhost:3000',   // Local development (create-react-app default)
+  'http://localhost:5173',   // Local development (Vite default)
+  'https://chatapp-jet-gamma.vercel.app', // Production frontend
+  'https://chatapp-jet-gamma.vercel.app/' // Production frontend with trailing slash
 ];
 
 // CORS middleware with debug logging
