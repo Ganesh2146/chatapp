@@ -56,14 +56,41 @@ app.use((req, res, next) => {
   next();
 });
 
-// Socket.IO configuration
+// Enhanced CORS configuration for all routes
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token']
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
+// Socket.IO configuration with enhanced CORS
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: function(origin, callback) {
+      if (!origin || allowedOrigins.some(allowedOrigin => 
+        origin === allowedOrigin || 
+        origin.replace(/\/$/, '') === allowedOrigin.replace(/\/$/, '')
+      )) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST'],
     credentials: true
   },
-  allowEIO3: true
+  allowEIO3: true,
+  transports: ['websocket', 'polling']
 });
 
 // Export io for use in other files

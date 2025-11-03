@@ -1,5 +1,13 @@
 // Base URL for API requests
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
+
+// Get auth token from cookies
+const getAuthToken = () => {
+  // Try to get token from localStorage first
+  const token = localStorage.getItem('token') || 
+                document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+  return token || '';
+};
 
 /**
  * Make an API request with proper error handling
@@ -15,7 +23,7 @@ export const apiRequest = async (endpoint, options = {}) => {
   };
 
   // Add authorization header if token exists
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -31,9 +39,19 @@ export const apiRequest = async (endpoint, options = {}) => {
       credentials: 'include', // Important for cookies
     });
 
-    // Handle non-2xx responses
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      // Clear auth state and redirect to login
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    // Handle other non-2xx responses
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response.json().catch(() => ({
+        message: `HTTP error! status: ${response.status}`
+      }));
       throw new Error(errorData.message || 'Something went wrong');
     }
 
@@ -54,18 +72,33 @@ export const get = (endpoint, options = {}) =>
   apiRequest(endpoint, { ...options, method: 'GET' });
 
 export const post = (endpoint, data, options = {}) => 
-  apiRequest(endpoint, { 
-    ...options, 
-    method: 'POST', 
-    body: JSON.stringify(data) 
+  apiRequest(endpoint, {
+    ...options,
+    method: 'POST',
+    body: JSON.stringify(data),
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 
-export const put = (endpoint, data, options = {}) => 
-  apiRequest(endpoint, { 
-    ...options, 
-    method: 'PUT', 
-    body: JSON.stringify(data) 
+export const put = (endpoint, data, options = {}) =>
+  apiRequest(endpoint, {
+    ...options,
+    method: 'PUT',
+    body: JSON.stringify(data),
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 
-export const del = (endpoint, options = {}) => 
-  apiRequest(endpoint, { ...options, method: 'DELETE' });
+export const del = (endpoint, options = {}) =>
+  apiRequest(endpoint, { 
+    ...options, 
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
