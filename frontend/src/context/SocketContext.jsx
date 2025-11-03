@@ -1,6 +1,6 @@
-import { createContext, useEffect, useState, useContext, useCallback } from "react";
+import { createContext, useEffect, useState, useContext, useCallback, useRef } from "react";
 import { useAuthContext } from "./Auth-Context";
-import { io } from 'socket.io-client';
+import { setupWebSocket } from "../Utils/api";
 
 export const SocketContext = createContext();
 
@@ -13,76 +13,75 @@ export const SocketContextProvider = ({ children }) => {
     const [socket, setSocket] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const { authUser } = useAuthContext();
+    const reconnectAttempts = useRef(0);
+    const maxReconnectAttempts = 5;
 
     const setupSocket = useCallback(() => {
-        if (authUser?.data?.user?._id) {
-            const socketUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
-            
-            // Clean up any existing socket
+        if (!authUser?.data?.user?._id) {
             if (socket) {
-                socket.disconnect();
+                socket.close();
                 setSocket(null);
             }
-
-            const newSocket = io(socketUrl, {
-                withCredentials: true,
-                reconnection: true,
-                reconnectionAttempts: 5,
-                reconnectionDelay: 1000,
-                reconnectionDelayMax: 5000,
-                autoConnect: true,
-                transports: ['websocket', 'polling'],
-                query: {
-                    userId: authUser.data.user._id
-                }
-            });
-
-            // Connection established
-            newSocket.on('connect', () => {
-                console.log('Socket connected:', newSocket.id);
-            });
-
-            // Connection error
-            newSocket.on('connect_error', (error) => {
-                console.error('Socket connection error:', error.message);
-                // Attempt to reconnect after a delay
-                setTimeout(() => {
-                    newSocket.connect();
-                }, 1000);
-            });
-
-            // Handle online users
-            newSocket.on("getOnlineUsers", (users) => {
-                setOnlineUsers(users);
-            });
-
-            // Handle disconnection
-            newSocket.on('disconnect', (reason) => {
-                console.log('Socket disconnected:', reason);
-                if (reason === 'io server disconnect') {
-                    // The disconnection was initiated by the server, you need to reconnect manually
-                    newSocket.connect();
-                }
-            });
-
-            setSocket(newSocket);
-
-            // Cleanup function
-            return () => {
-                if (newSocket) {
-                    newSocket.off('connect');
-                    newSocket.off('connect_error');
-                    newSocket.off('disconnect');
-                    newSocket.off('getOnlineUsers');
-                    newSocket.disconnect();
-                }
-            };
+            return;
         }
+
+        // Clean up any existing socket
+        if (socket) {
+            socket.close();
+            setSocket(null);
+        }
+
+        const userId = authUser.data.user._id;
+        const path = `/socket.io/?userId=${userId}&EIO=4&transport=websocket`;
+
+        const socketInstance = setupWebSocket(path, {
+            onOpen: () => {
+                console.log('WebSocket connection established');
+                reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
+            },
+            onMessage: (event) => {
+                try {
+                    const data = typeof event === 'string' ? JSON.parse(event) : event;
+                    if (data.type === 'getOnlineUsers') {
+                        setOnlineUsers(data.users || []);
+                    }
+                    // Handle other message types as needed
+                } catch (error) {
+                    console.error('Error processing WebSocket message:', error);
+                }
+            },
+            onClose: (event) => {
+                console.log('WebSocket connection closed:', event);
+                if (event.code !== 1000) { // Don't reconnect on normal closure
+                    reconnectAttempts.current++;
+                    if (reconnectAttempts.current <= maxReconnectAttempts) {
+                        console.log(`Attempting to reconnect (${reconnectAttempts.current}/${maxReconnectAttempts})...`);
+                        setTimeout(setupSocket, 1000 * reconnectAttempts.current);
+                    }
+                }
+            },
+            onError: (error) => {
+                console.error('WebSocket error:', error);
+            },
+            reconnect: true,
+            reconnectInterval: 1000,
+            maxReconnectAttempts: 5
+        });
+
+        setSocket(socketInstance);
+
+        // Cleanup function
+        return () => {
+            if (socketInstance) {
+                socketInstance.close();
+            }
+        };
     }, [authUser]);
 
     // Set up socket when authUser changes
     useEffect(() => {
-        const cleanup = setupSocket();
+        setupSocket();
+        
         return () => {
             if (cleanup) cleanup();
         };

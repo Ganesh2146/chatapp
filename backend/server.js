@@ -33,69 +33,124 @@ app.use(cookieParser());
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://chatapp-jet-gamma.vercel.app'
+  'https://chatapp-jet-gamma.vercel.app',
+  'https://chatapp-jet-gamma.vercel.app/'
 ];
 
-// Enable CORS for all routes
-app.use(cors({
+// CORS middleware
+const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Check if origin is allowed
+    // Check if origin is allowed (with or without trailing slash)
     const isAllowed = allowedOrigins.some(allowedOrigin => 
       origin === allowedOrigin || 
-      origin.replace(/\/$/, '') === allowedOrigin.replace(/\/$/, '')
+      origin.replace(/\/+$/, '') === allowedOrigin.replace(/\/+$/, '')
     );
     
-    if (!isAllowed) {
-      const msg = `CORS policy: ${origin} not allowed`;
-      console.error(msg);
-      return callback(new Error(msg), false);
+    if (isAllowed) {
+      return callback(null, true);
+    } else {
+      console.warn(`Blocked by CORS: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
     }
-    return callback(null, true);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
-  exposedHeaders: ['*'],
-  maxAge: 600 // Cache preflight request for 10 minutes
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'x-csrf-token',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Type',
+    'Authorization',
+    'x-csrf-token'
+  ],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
 
 // Handle preflight requests
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 
-// Socket.IO configuration with CORS
+// Socket.IO configuration
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
       
-      // Check if origin is allowed
+      // Check if origin is allowed (with or without trailing slash)
       const isAllowed = allowedOrigins.some(allowedOrigin => 
         origin === allowedOrigin || 
-        origin.replace(/\/$/, '') === allowedOrigin.replace(/\/$/, '')
+        origin.replace(/\/+$/, '') === allowedOrigin.replace(/\/+$/, '')
       );
       
-      if (!isAllowed) {
-        const msg = `Socket.IO CORS policy: ${origin} not allowed`;
-        console.error(msg);
-        return callback(new Error(msg), false);
+      if (isAllowed) {
+        return callback(null, true);
+      } else {
+        console.warn(`Socket.IO blocked by CORS: ${origin}`);
+        return callback(new Error('Not allowed by CORS'));
       }
-      return callback(null, true);
     },
     methods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
-    exposedHeaders: ['*'],
-    transports: ['websocket', 'polling']
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-csrf-token'
+    ],
+    exposedHeaders: [
+      'Content-Length',
+      'Content-Type',
+      'Authorization',
+      'x-csrf-token'
+    ]
+  },
+  path: '/socket.io/',
+  serveClient: false,
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  perMessageDeflate: {
+    threshold: 1024,
+    zlibDeflateOptions: {
+      chunkSize: 16 * 1024,
+    },
+    zlibInflateOptions: {
+      windowBits: 15,
+      memLevel: 8
+    }
   },
   allowEIO3: true,
-  pingTimeout: 30000, // Increase timeout to 30 seconds
-  pingInterval: 25000,
-  cookie: false, // Disable Socket.IO cookies since we're using JWT
-  path: '/socket.io/' // Ensure consistent path
+  pingTimeout: 60000,    // 60 seconds
+  pingInterval: 25000,   // 25 seconds
+  cookie: false,
+  httpCompression: true,
+  maxHttpBufferSize: 1e8 // 100MB
+});
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+  
+  // Handle errors
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
+  });
 });
 
 // Export io for use in other files
