@@ -15,80 +15,98 @@ export const SocketContextProvider = ({ children }) => {
     const { authUser } = useAuthContext();
     const reconnectAttempts = useRef(0);
     const maxReconnectAttempts = 5;
+    const socketRef = useRef(null);
 
+    // Function to handle WebSocket connection
     const setupSocket = useCallback(() => {
-        if (!authUser?.data?.user?._id) {
-            if (socket) {
-                socket.close();
+        // If there's no authenticated user, close any existing socket and return
+        if (!authUser) {
+            if (socketRef.current) {
+                socketRef.current.close();
+                socketRef.current = null;
                 setSocket(null);
             }
-            return;
+            return () => {};
         }
 
-        // Clean up any existing socket
-        if (socket) {
-            socket.close();
-            setSocket(null);
+        // Close existing socket if any
+        if (socketRef.current) {
+            socketRef.current.close();
         }
 
-        const userId = authUser.data.user._id;
-        const path = `/socket.io/?userId=${userId}&EIO=4&transport=websocket`;
+        // Create a new socket connection
+        const socketInstance = setupWebSocket(authUser._id);
+        let isMounted = true;
 
-        const socketInstance = setupWebSocket(path, {
-            onOpen: () => {
-                console.log('WebSocket connection established');
-                reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
-            },
-            onMessage: (event) => {
-                try {
-                    const data = typeof event === 'string' ? JSON.parse(event) : event;
-                    if (data.type === 'getOnlineUsers') {
-                        setOnlineUsers(data.users || []);
-                    }
-                    // Handle other message types as needed
-                } catch (error) {
-                    console.error('Error processing WebSocket message:', error);
-                }
-            },
-            onClose: (event) => {
-                console.log('WebSocket connection closed:', event);
-                if (event.code !== 1000) { // Don't reconnect on normal closure
-                    reconnectAttempts.current++;
-                    if (reconnectAttempts.current <= maxReconnectAttempts) {
-                        console.log(`Attempting to reconnect (${reconnectAttempts.current}/${maxReconnectAttempts})...`);
-                        setTimeout(setupSocket, 1000 * reconnectAttempts.current);
-                    }
-                }
-            },
-            onError: (error) => {
-                console.error('WebSocket error:', error);
-            },
-            reconnect: true,
-            reconnectInterval: 1000,
-            maxReconnectAttempts: 5
-        });
+        // Set up event listeners
+        const onConnect = () => {
+            console.log('Connected to WebSocket server');
+            if (isMounted) {
+                setSocket(socketInstance);
+            }
+        };
 
-        setSocket(socketInstance);
+        const onDisconnect = () => {
+            console.log('Disconnected from WebSocket server');
+            if (isMounted) {
+                setSocket(null);
+            }
+        };
+
+        const onOnlineUsers = (users) => {
+            if (isMounted) {
+                setOnlineUsers(users);
+            }
+        };
+
+        // Add event listeners
+        socketInstance.on('connect', onConnect);
+        socketInstance.on('disconnect', onDisconnect);
+        socketInstance.on('getOnlineUsers', onOnlineUsers);
+
+        // Store the socket instance in the ref
+        socketRef.current = socketInstance;
 
         // Cleanup function
         return () => {
+            isMounted = false;
             if (socketInstance) {
-                socketInstance.close();
+                // Remove event listeners
+                socketInstance.off('connect', onConnect);
+                socketInstance.off('disconnect', onDisconnect);
+                socketInstance.off('getOnlineUsers', onOnlineUsers);
+                
+                // Only close if this is the current socket
+                if (socketInstance === socketRef.current) {
+                    socketInstance.close();
+                    socketRef.current = null;
+                }
             }
         };
     }, [authUser]);
 
     // Set up socket when authUser changes
     useEffect(() => {
-        setupSocket();
-        
-        return () => {
-            if (cleanup) cleanup();
-        };
+        const cleanup = setupSocket();
+        return cleanup;
     }, [setupSocket]);
 
+    // Clean up on unmount
+    useEffect(() => {
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.close();
+                socketRef.current = null;
+            }
+        };
+    }, []);
+
     return (
-        <SocketContext.Provider value={{ socket, onlineUsers, isConnected: socket?.connected || false }}>
+        <SocketContext.Provider value={{ 
+            socket, 
+            onlineUsers, 
+            isConnected: socket?.connected || false 
+        }}>
             {children}
         </SocketContext.Provider>
     );
