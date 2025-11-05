@@ -5,10 +5,6 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import express from 'express';
-import 'dotenv/config';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
 import authRouter from './routes/authRouter.js';
 import messageRouter from './routes/messageRouter.js';
 import userRouter from './routes/userRouter.js';
@@ -16,10 +12,6 @@ import connectToDB from './db/connectdb.js';
 
 const app = express();
 const server = createServer(app);
-import authRouter from './routes/authRouter.js';
-import messageRouter from './routes/messageRouter.js';
-import userRouter from './routes/userRouter.js';
-import connectToDB from './db/connectdb.js';
 
 // Base setup
 const __dirname = path.resolve();
@@ -77,11 +69,8 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-// Apply CORS middleware
+// Apply CORS middleware with preflight handling
 app.use(cors(corsOptions));
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
 
 // Socket.IO configuration
 const io = new Server(server, {
